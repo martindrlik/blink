@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { fade } from 'svelte/transition';
 
     let names: string[] = [];
     let newName = '';
@@ -130,50 +131,50 @@
     }
 </script>
 
-<div class="h-screen w-full overflow-hidden bg-gray-900 text-white font-sans">
+<div class="h-screen w-full overflow-hidden bg-zinc-900 text-gray-200 font-sans relative">
     {#if gameState === 'input'}
-        <div class="flex flex-col items-center justify-center h-full p-4 space-y-6">
-            <h1 class="text-4xl font-bold text-red-500 mb-8">Wheel of Bad Luck</h1>
+        <div class="absolute inset-0 flex flex-col items-center justify-center h-full p-4 space-y-6 bg-zinc-900 z-50" out:fade={{ duration: 500 }} in:fade={{ duration: 500 }}>
+            <h1 class="text-4xl font-bold text-gray-400 mb-8 uppercase tracking-widest border-b border-gray-700 pb-2">Wheel of Bad Luck</h1>
             
-            <div class="w-full max-w-md bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700">
-                <h2 class="text-xl mb-4 font-semibold text-gray-300">Who dares to enter?</h2>
+            <div class="w-full max-w-md bg-zinc-800 p-6 rounded-lg shadow-2xl border border-zinc-700">
+                <h2 class="text-xl mb-4 font-medium text-gray-400 text-center">Enter the names of the doomed</h2>
                 
                 <form on:submit|preventDefault={addName} class="flex gap-2 mb-6">
                     <input
                         type="text"
                         bind:value={newName}
-                        placeholder="Enter name..."
-                        class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-red-500 text-white"
+                        placeholder="Type a name..."
+                        class="flex-1 px-4 py-2 bg-zinc-700 border border-zinc-600 rounded text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:bg-zinc-600 transition-colors"
                     />
                     <button
                         type="submit"
-                        class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded font-bold transition-colors"
+                        class="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-gray-200 rounded font-semibold transition-colors border border-gray-500"
                     >
                         Add
                     </button>
                 </form>
 
-                <div class="space-y-2 max-h-60 overflow-y-auto mb-6 pr-2">
+                <div class="space-y-2 max-h-60 overflow-y-auto mb-6 pr-2 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
                     {#each names as name, i}
-                        <div class="flex justify-between items-center bg-gray-700/50 p-2 rounded group">
-                            <span>{name}</span>
+                        <div class="flex justify-between items-center bg-zinc-700/50 p-2 rounded group border border-transparent hover:border-gray-600 transition-colors">
+                            <span class="text-gray-300">{name}</span>
                             <button 
                                 on:click={() => removeName(i)}
-                                class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                class="text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity px-2"
                             >
                                 ✕
                             </button>
                         </div>
                     {/each}
                     {#if names.length === 0}
-                        <p class="text-gray-500 text-center italic">No souls added yet...</p>
+                        <p class="text-gray-600 text-center italic text-sm py-4">The list is empty...</p>
                     {/if}
                 </div>
 
                 <button
                     on:click={startGame}
                     disabled={names.length === 0}
-                    class="w-full py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-lg transition-all shadow-lg hover:shadow-red-900/50"
+                    class="w-full py-3 bg-zinc-700 hover:bg-zinc-600 text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-lg transition-all shadow-lg border border-zinc-600 hover:border-gray-500 uppercase tracking-wide"
                 >
                     Enter the Forest
                 </button>
@@ -181,7 +182,7 @@
         </div>
     {:else}
         <!-- Game Scene -->
-        <div class="relative w-full h-full overflow-hidden bg-gradient-to-b from-[#0f172a] via-[#1e293b] to-[#334155]">
+        <div class="absolute inset-0 w-full h-full overflow-hidden bg-gradient-to-b from-[#0f172a] via-[#1e293b] to-[#334155]" in:fade={{ duration: 800 }} out:fade={{ duration: 500 }}>
             
             <!-- Stars -->
             {#each stars as star}
