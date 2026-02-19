@@ -77,12 +77,14 @@
     });
 
     function handleKeydown(e: KeyboardEvent) {
-        if (e.key === 'Enter' && gameState === 'playing' && !lightning.active && names.length > deadIndices.size) {
+        if (e.key === 'Enter') {
             triggerLightning();
         }
     }
 
     function triggerLightning() {
+        if (gameState !== 'playing' || lightning.active) return;
+
         // Find alive people
         const aliveIndices = names.map((_, i) => i).filter(i => !deadIndices.has(i));
         
@@ -484,7 +486,7 @@
             <div class="absolute top-4 right-4 z-50 bg-black/50 text-white rounded text-sm backdrop-blur-md border border-white/10 p-3">
                 <h3 class="font-bold text-gray-300 border-b border-gray-600 mb-2 pb-1 text-xs uppercase tracking-wider">Commands</h3>
                 <div class="flex items-center gap-2">
-                    <kbd class="px-2 py-0.5 bg-gray-700 rounded border border-gray-600 font-mono text-xs shadow-sm">Enter</kbd>
+                    <button on:click={triggerLightning} class="px-2 py-0.5 bg-gray-700 rounded border border-gray-600 font-mono text-xs shadow-sm hover:bg-gray-600 active:bg-gray-800 transition-colors cursor-pointer">Enter</button>
                     <span class="text-xs text-gray-300">Strike Lightning</span>
                 </div>
             </div>
