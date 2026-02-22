@@ -968,32 +968,51 @@
             
             ctx.save();
             ctx.translate(centerX, centerY);
+            
+            // Add Spin
+            const spin = time * 4; // Faster spin
+            ctx.rotate(spin);
+            
             ctx.scale(rockScale, rockScale);
             
             // Draw Big Rock (centered at 0,0 after translate)
             ctx.fillStyle = '#3e2723'; // Dark Brown
             ctx.beginPath();
-            // Jagged shape
+            // MORE JAGGED shape (more vertices)
             ctx.moveTo(-10, -8);
+            ctx.lineTo(-4, -12); // New
             ctx.lineTo(5, -10);
+            ctx.lineTo(10, -8); // New
             ctx.lineTo(12, -2);
+            ctx.lineTo(14, 4);  // New
             ctx.lineTo(8, 8);
+            ctx.lineTo(2, 11);  // New
             ctx.lineTo(-5, 12);
             ctx.lineTo(-12, 5);
+            ctx.lineTo(-14, -2); // New
             ctx.closePath();
             ctx.fill();
             
             // Highlights/Crater
+            // Removed counter-rotation so details spin with the rock
+            
             ctx.fillStyle = '#5d4037';
             ctx.beginPath();
             ctx.arc(-3, -3, 3, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.fillStyle = '#271c19'; // Shadow side
+            // Second Crater
             ctx.beginPath();
-            ctx.moveTo(-10, -8);
-            ctx.lineTo(-5, 5);
-            ctx.lineTo(-12, 5);
+            ctx.arc(6, 4, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Shadow side (approximate)
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.moveTo(-14, -2);
+            ctx.lineTo(-5, 12);
+            ctx.lineTo(2, 11);
+            ctx.lineTo(-1, 0); // Inner point
             ctx.fill();
 
             ctx.restore();
