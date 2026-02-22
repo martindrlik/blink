@@ -107,6 +107,10 @@
         isCheering: boolean = false; // New state
         rotation: number = 0;
         rotSpeed: number = 0;
+        isDead: boolean = false;
+        targetVictimName: string | null = null;
+        stabbingFrame: number = 0;
+        deathTime: number = 0;
 
         constructor(name: string, color: string, x: number, y: number) {
             this.name = name;
@@ -120,6 +124,149 @@
         }
 
         update(platforms: Platform[], gameWidth: number, gameHeight: number, isSomeoneSpeaking: boolean, currentSpeakerName: string | null = null, isRockApproaching: boolean = false) {
+            // 1. Handle Dead Body Physics
+            if (this.isDead) {
+                this.vy += GRAVITY;
+                this.y += this.vy;
+                this.vx *= 0.95; // Lower friction for sliding (was 0.8)
+                this.x += this.vx;
+                
+                // Rotation (Fall over)
+                const targetRot = this.facingRight ? Math.PI / 2 : -Math.PI / 2;
+                // Lerp rotation
+                this.rotation = this.rotation * 0.9 + targetRot * 0.1;
+
+                // Floor/Platform collision for corpse (simplified)
+                let grounded = false;
+                for (const platform of platforms) {
+                    if (this.y + this.height > platform.y && 
+                        this.y + this.height < platform.y + platform.height + 10 &&
+                        this.x + this.width > platform.x && 
+                        this.x < platform.x + platform.width &&
+                        this.vy >= 0) {
+                        
+                        this.y = platform.y - this.height + 4; // Sink slightly into platform (dead)
+                        this.vy = 0;
+                        grounded = true;
+                    }
+                }
+                if (!grounded && this.y + this.height > gameHeight - 20) {
+                     this.y = gameHeight - 20 - this.height + 4; // Sink slightly into floor
+                     this.vy = 0;
+                }
+                
+                // Bounds
+                if (this.x < 0) this.x = 0;
+                if (this.x > gameWidth - this.width) this.x = gameWidth - this.width;
+                
+                // Resurrection Check (3-5 seconds)
+                if (Date.now() - this.deathTime > 4000) {
+                     this.isDead = false;
+                     // When lying down (rotated 90deg), the visual center is same as standing center.
+                     // But visually, the "feet" of the corpse are sideways.
+                     // The logical X,Y is the top-left of the bounding box.
+                     
+                     // If we rotate around center:
+                     // Standing: Feet at center.y + height/2
+                     // Lying: Feet at center.x +/- height/2 (visually)
+                     
+                     // We want to stand up at the position of the corpse's "feet" or center?
+                     // Probably center is best to avoid clipping into walls.
+                     // But the user says "spot of his corpse".
+                     
+                     // Let's adjust Y slightly more to be safe
+                     this.y -= 4; // Un-sink from ground
+                     
+                     // If we were facing right, our feet were to the left visually (rotated +90deg clockwise)
+                     // Wait: +90deg (PI/2) rotates Clockwise. Top (Head) -> Right. Bottom (Feet) -> Left.
+                     // So feet were at center.x - height/2.
+                     // If we stand up at center.x, we shift right by height/2.
+                     
+                     // If facing Left (-90deg), Feet -> Right.
+                     // So feet were at center.x + height/2.
+                     
+                     // Let's try to shift X to match where the feet were?
+                     // No, "stand up on the spot" usually means center of mass stays put.
+                     // But maybe they slid? 
+                     
+                     // Let's just ensure we reset rotation cleanly and maybe a bit of upward velocity is enough.
+                     // The issue might be the visual offset during the frame of transition.
+                     
+                     this.rotation = 0;
+                     this.vy = -5; // Jump up
+                     this.vx = 0;
+                     
+                     // Force update of grounded state next frame
+                     this.isGrounded = false;
+                }
+                
+                return; // Stop processing normal logic for dead player
+            }
+
+            // 2. Handle Stabbing Cooldown
+            if (this.stabbingFrame > 0) {
+                this.stabbingFrame--;
+                this.vy += GRAVITY;
+                this.y += this.vy;
+                // No movement while stabbing
+                this.vx = 0;
+                // Collision check to stay on ground
+                 for (const platform of platforms) {
+                    if (this.y + this.height > platform.y && 
+                        this.y + this.height < platform.y + platform.height + 10 &&
+                        this.x + this.width > platform.x && 
+                        this.x < platform.x + platform.width &&
+                        this.vy >= 0) {
+                        this.y = platform.y - this.height;
+                        this.vy = 0;
+                    }
+                }
+                return;
+            }
+
+            // 3. Handle Pursuit (Killer Mode)
+            if (this.targetVictimName) {
+                const victim = players.find(p => p.name === this.targetVictimName);
+                if (victim && !victim.isDead) {
+                    // Update targetX to follow victim
+                    this.targetX = victim.x;
+                    
+                    // Check if close enough to kill
+                    const dist = Math.abs(this.x - victim.x);
+                    const yDist = Math.abs(this.y - victim.y);
+                    
+                    if (dist < 8 && yDist < 10) {
+                        // KILL!
+                        this.stabbingFrame = 20; // Freeze for animation
+                        this.targetX = null;     // Stop moving
+                        this.targetVictimName = null; // Done
+                        
+                        // Kill victim
+                        victim.isDead = true;
+                        victim.deathTime = Date.now();
+                        victim.vx = (this.facingRight ? 1 : -1) * 5; // Reduced Knockback (was 8)
+                        victim.vy = -4; // Reduced launch (was -5)
+                        
+                        // BLOOD EXPLOSION
+                        for(let i=0; i<20; i++) {
+                            particles.push({
+                                x: victim.x + Math.random() * 10,
+                                y: victim.y + Math.random() * 10,
+                                vx: (Math.random() - 0.5) * 4,
+                                vy: (Math.random() - 1) * 4,
+                                life: 1.0 + Math.random(),
+                                color: '#ef4444', // Red
+                                size: Math.random() * 3 + 1
+                            });
+                        }
+                    }
+                } else {
+                    // Victim gone or dead, stop pursuit
+                    this.targetVictimName = null;
+                    this.targetX = null;
+                }
+            }
+
             // Apply gravity
             this.vy += GRAVITY;
             
@@ -342,9 +489,19 @@
 
         draw(ctx: CanvasRenderingContext2D) {
             ctx.save();
+            
+            // Handle rotation for dead body
+            if (this.isDead) {
+                const cx = this.x + this.width/2;
+                const cy = this.y + this.height/2;
+                ctx.translate(cx, cy);
+                ctx.rotate(this.rotation);
+                ctx.translate(-cx, -cy);
+            }
+
             // Add bobbing if cheering
             let yOffset = 0;
-            if (this.isCheering && this.isGrounded) {
+            if (this.isCheering && this.isGrounded && !this.isDead) {
                  yOffset = Math.sin(this.frame * 0.5) * 1; // Gentle bob
             }
             ctx.translate(Math.round(this.x), Math.round(this.y + yOffset));
@@ -356,9 +513,27 @@
             // Head
             ctx.fillStyle = '#ffccaa'; // Skin
             ctx.fillRect(2, 1, 6, 5);
+            
+            // Dead eyes
+            if (this.isDead) {
+                 ctx.fillStyle = '#000';
+                 if (this.facingRight) {
+                    ctx.fillRect(5, 3, 1, 1);
+                    ctx.fillRect(7, 3, 1, 1);
+                 } else {
+                    ctx.fillRect(2, 3, 1, 1);
+                    ctx.fillRect(4, 3, 1, 1);
+                 }
+                 // Blood pool
+                 ctx.fillStyle = '#ef4444';
+                 ctx.globalAlpha = 0.6;
+                 ctx.fillRect(-2, 14, 14, 2);
+                 ctx.globalAlpha = 1.0;
+            }
+
             // Legs
             ctx.fillStyle = '#333';
-            if (Math.abs(this.vx) > 0.1) {
+            if (Math.abs(this.vx) > 0.1 && !this.isDead) {
                 // Walking animation
                 const walkCycle = Math.sin(this.frame) > 0;
                 ctx.fillRect(2, 12, 3, walkCycle ? 3 : 4);
@@ -369,7 +544,7 @@
             }
             
             // ARMS (Cheering logic)
-            if (this.isCheering) {
+            if (this.isCheering && !this.isDead) {
                 ctx.fillStyle = this.color; // Sleeve
                 // Raise hands
                 if (Math.sin(this.frame * 0.5) > 0) {
@@ -381,27 +556,47 @@
                      ctx.fillRect(1, 6, 2, 4); 
                      ctx.fillRect(7, 6, 2, 4); 
                 }
+            } else if (this.stabbingFrame > 0) {
+                // Stabbing animation
+                ctx.fillStyle = this.color;
+                if (this.facingRight) {
+                    ctx.fillRect(6, 6, 6, 2); // Arm forward
+                    ctx.fillStyle = '#bdc3c7'; // Knife blade
+                    ctx.fillRect(12, 6, 4, 1);
+                    ctx.fillStyle = '#ef4444'; // Blood on knife?
+                    ctx.fillRect(14, 6, 2, 1);
+                } else {
+                    ctx.fillRect(-2, 6, 6, 2); // Arm forward
+                    ctx.fillStyle = '#bdc3c7';
+                    ctx.fillRect(-6, 6, 4, 1);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(-6, 6, 2, 1);
+                }
             } else {
                 // Normal arms (sides)
                 // Just implied by body or could draw them
             }
 
-            // Eyes
-            ctx.fillStyle = '#000';
-            if (this.facingRight) {
-                ctx.fillRect(5, 3, 1, 1);
-                ctx.fillRect(7, 3, 1, 1);
-            } else {
-                ctx.fillRect(2, 3, 1, 1);
-                ctx.fillRect(4, 3, 1, 1);
+            // Eyes (Alive)
+            if (!this.isDead) {
+                ctx.fillStyle = '#000';
+                if (this.facingRight) {
+                    ctx.fillRect(5, 3, 1, 1);
+                    ctx.fillRect(7, 3, 1, 1);
+                } else {
+                    ctx.fillRect(2, 3, 1, 1);
+                    ctx.fillRect(4, 3, 1, 1);
+                }
             }
 
             // Name tag
-            ctx.fillStyle = 'white';
-            ctx.font = '4px monospace';
-            ctx.textAlign = 'center';
-            // Adjusted font size for smaller scale context
-            ctx.fillText(this.name, 5, -2);
+            if (!this.isDead) {
+                ctx.fillStyle = 'white';
+                ctx.font = '4px monospace';
+                ctx.textAlign = 'center';
+                // Adjusted font size for smaller scale context
+                ctx.fillText(this.name, 5, -2);
+            }
             
             ctx.restore();
         }
@@ -1093,8 +1288,65 @@
                          }
                      });
                  }
+             } else if (e.key === ' ') {
+                 // VIOLENT TRANSITION
+                 if (players.length > 0 && platforms.length > 1) {
+                     const candidates = players.filter(p => !spokenPlayers.has(p.name) && !p.isDead && p.name !== currentSpeakerName);
+
+                     if (candidates.length === 0) {
+                         // Everyone dead or spoken? Rock approach?
+                         isRockApproaching = true;
+                         rockScale = 0.1;
+                         return;
+                     }
+
+                     const stage = platforms[1];
+                     const micX = stage.x + stage.width / 2;
+
+                     // Check if we have a victim
+                     if (!currentSpeakerName) {
+                         // No victim, just act like Enter (Normal start)
+                         const speaker = candidates[Math.floor(Math.random() * candidates.length)];
+                         spokenPlayers.add(speaker.name);
+                         currentSpeakerName = speaker.name;
+                         
+                         players.forEach(p => {
+                             if (p === speaker) {
+                                 p.targetX = micX - 8;
+                                 p.facingRight = true;
+                                 if (p.y > stage.y) p.vy = -10; 
+                             }
+                         });
+                     } else {
+                         // KILLER MODE
+                         const victimName = currentSpeakerName;
+                         const killer = candidates[Math.floor(Math.random() * candidates.length)];
+                         
+                         spokenPlayers.add(killer.name);
+                         currentSpeakerName = killer.name; // They will be the speaker
+                         
+                         // Set Killer to hunt
+                         killer.targetVictimName = victimName;
+                         killer.facingRight = killer.x < micX; // Face victim initially
+                         if (killer.y > stage.y) killer.vy = -10; // Jump to stage
+                         
+                         // Everyone else (except victim and killer) clears out
+                         players.forEach(p => {
+                             if (p.name !== victimName && p !== killer && !p.isDead) {
+                                 // Scram!
+                                 if (p.x > stage.x - 10 && p.x < stage.x + stage.width + 10) {
+                                     const centerStage = stage.x + stage.width / 2;
+                                     const goLeft = p.x < centerStage;
+                                     const buffer = 15 + Math.random() * 20;
+                                     if (goLeft) p.targetX = stage.x - buffer;
+                                     else p.targetX = stage.x + stage.width + buffer;
+                                 }
+                             }
+                         });
+                     }
+                 }
              }
-        }
+         }
     }
 </script>
 
