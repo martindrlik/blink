@@ -105,6 +105,8 @@
         currentPlatform: Platform | null = null;
         targetX: number | null = null; // Target position to walk to
         isCheering: boolean = false; // New state
+        rotation: number = 0;
+        rotSpeed: number = 0;
 
         constructor(name: string, color: string, x: number, y: number) {
             this.name = name;
@@ -202,7 +204,7 @@
                     // TALKING BEHAVIOR:
                     // 1. Random small horizontal pacing
                     if (Math.random() < 0.05) {
-                        this.vx = (Math.random() - 0.5) * (SPEED * 0.5); 
+                        this.vx = (Math.random() - 0.5) * (SPEED * 0.25); 
                     }
                     
                     // Keep roughly near mic (center)
@@ -218,8 +220,9 @@
                         this.facingRight = this.vx > 0;
                     } else {
                         // Occasionally look back, but mostly face audience
-                        if (Math.random() < 0.02) this.facingRight = !this.facingRight;
-                        else if (Math.random() < 0.1) this.facingRight = true;
+                        // Reduced frequency of eye movement/direction flipping
+                        if (Math.random() < 0.005) this.facingRight = !this.facingRight;
+                        else if (Math.random() < 0.02) this.facingRight = true;
                     }
 
                     // 3. "Talking" bob
@@ -808,19 +811,14 @@
                 
                 // --- GENERATE DEBRIS PARTICLES FOR EVERYTHING ---
 
-                // 1. Players
+                // 1. Players - NOW THEY FLY AS BODIES
                 players.forEach(p => {
-                    for(let i=0; i<15; i++) {
-                        particles.push({
-                            x: p.x + Math.random() * p.width,
-                            y: p.y + Math.random() * p.height,
-                            vx: (Math.random() - 0.5) * 10,
-                            vy: (Math.random() - 0.5) * 10,
-                            life: 5.0 + Math.random(), // Long life
-                            color: [p.color, '#ffccaa', '#333'][Math.floor(Math.random()*3)],
-                            size: Math.random() * 4 + 2
-                        });
-                    }
+                    // Give them random velocity for space drift
+                    p.vx = (Math.random() - 0.5) * 5; // Slower, more floaty
+                    p.vy = (Math.random() - 0.5) * 5;
+                    // Add rotation property
+                    p.rotation = 0;
+                    p.rotSpeed = (Math.random() - 0.5) * 0.2;
                 });
 
                 // 2. Platforms
@@ -829,9 +827,9 @@
                         particles.push({
                             x: p.x + Math.random() * p.width,
                             y: p.y + Math.random() * p.height,
-                            vx: (Math.random() - 0.5) * 8,
-                            vy: (Math.random() - 0.5) * 8,
-                            life: 5.0 + Math.random(),
+                            vx: (Math.random() - 0.5) * 4, // Slower (was 8)
+                            vy: (Math.random() - 0.5) * 4,
+                            life: 8.0 + Math.random() * 2, // Longer life (was 5)
                             color: ['#7f8c8d', '#95a5a6', '#34495e'][Math.floor(Math.random()*3)],
                             size: Math.random() * 5 + 2
                         });
@@ -843,9 +841,9 @@
                      particles.push({
                          x: Math.random() * width,
                          y: Math.random() * height,
-                         vx: (Math.random() - 0.5) * 15, // Fast expansion
-                         vy: (Math.random() - 0.5) * 15,
-                         life: 5.0 + Math.random(),
+                         vx: (Math.random() - 0.5) * 8, // Slower (was 15)
+                         vy: (Math.random() - 0.5) * 8,
+                         life: 8.0 + Math.random() * 2, // Longer life
                          color: ['#2c3e50', '#0a0a12', '#f39c12', '#ffffff'][Math.floor(Math.random()*4)],
                          size: Math.random() * 6 + 2
                      });
@@ -925,20 +923,69 @@
         // EXPLOSION PARTICLES
         if (isExploding) {
             // Draw a flash background initially
-            if (Date.now() - explosionStartTime < 200) {
-                 ctx.fillStyle = '#ffffff';
+            if (Date.now() - explosionStartTime < 500) { // Longer flash (was 200)
+                 const alpha = 1 - (Date.now() - explosionStartTime) / 500;
+                 ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
                  ctx.fillRect(0, 0, width, height);
             }
+
+            // Draw drifting players
+            players.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vx *= 0.995; // Very low drag
+                p.vy *= 0.995;
+                
+                // Rotate
+                p.rotation += p.rotSpeed;
+
+                // Move to center of player for rotation
+                const cx = p.x + p.width/2;
+                const cy = p.y + p.height/2;
+                
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(p.rotation);
+                
+                // Draw relative to center (0,0 is now center of player)
+                // Player is ~10x16. Center is (5, 8)
+                const dx = -5;
+                const dy = -8;
+                
+                ctx.fillStyle = p.color;
+                // Body
+                ctx.fillRect(dx + 2, dy + 6, 6, 6);
+                // Head
+                ctx.fillStyle = '#ffccaa'; // Skin
+                ctx.fillRect(dx + 2, dy + 1, 6, 5);
+                // Legs (Flailing/Floating)
+                ctx.fillStyle = '#333';
+                ctx.fillRect(dx + 1, dy + 12, 3, 4); // Left leg out
+                ctx.fillRect(dx + 7, dy + 10, 3, 4); // Right leg up
+                
+                // Arms (Flailing)
+                ctx.fillStyle = p.color;
+                ctx.fillRect(dx + 0, dy + 4, 2, 4); // Left arm up
+                ctx.fillRect(dx + 8, dy + 7, 2, 4); // Right arm down
+
+                // Eyes (X X)
+                ctx.fillStyle = '#000';
+                ctx.font = '4px monospace';
+                ctx.fillText('x', dx + 3, dy + 5);
+                ctx.fillText('x', dx + 6, dy + 5);
+                
+                ctx.restore();
+            });
 
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
                 p.x += p.vx;
                 p.y += p.vy;
                 // No gravity for space explosion, or very little
-                p.vx *= 0.99; // Drag
-                p.vy *= 0.99;
+                p.vx *= 0.995; // Less Drag (was 0.99)
+                p.vy *= 0.995;
                 
-                p.life -= 0.005; // Slower decay for 5 seconds roughly
+                p.life -= 0.002; // Slower decay (was 0.005)
                 
                 if (p.life <= 0) {
                     particles.splice(i, 1);
@@ -951,11 +998,11 @@
                 }
             }
 
-            // Check if 5 seconds passed
+            // Check if 8 seconds passed (longer sequence)
             const elapsed = Date.now() - explosionStartTime;
-            if (elapsed > 5000) {
+            if (elapsed > 8000) {
                 // Fade out
-                fadeAlpha += 0.01;
+                fadeAlpha += 0.005; // Slower fade
                 if (fadeAlpha > 1) fadeAlpha = 1;
                 
                 ctx.fillStyle = `rgba(0, 0, 0, ${fadeAlpha})`;
